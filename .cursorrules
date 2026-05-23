@@ -1,0 +1,162 @@
+# Cursor Rules — Nuclear Reactor Digital Twin Platform
+
+## Project Overview
+Nuclear digital twin platform simulating PWR (fission), Helion FRC (fusion), and MSR (liquid-fuel fission). Built in Python/Dash/SciPy. Full spec in `docs/SPEC.md`. Architecture in `ARCHITECTURE.md`. Agent instructions in `CLAUDE.md`.
+
+---
+
+## Language & Stack
+- Python 3.11+ only
+- Dash + Dash Bootstrap Components for UI
+- SciPy `solve_ivp` with `method='Radau'` for all ODE integration
+- Numba `@njit` for hot physics loops (kinetics RHS, Bosch-Hale lookup)
+- Pydantic v2 for all input validation schemas
+- h5py for HDF5 save/load
+- pytest + pytest-benchmark for testing
+- Ruff for linting
+- Poetry for dependency management (never suggest pip install)
+
+---
+
+## Code Style
+- Type hints on all function signatures
+- Module-level docstrings on every file: what it does and which spec equations it implements
+- Function docstrings include: physics description, args, returns, units
+- Keep physics functions pure — no side effects, no I/O, no Dash imports
+- Constants go in `data/` modules, never hardcoded inline
+- Physical justification comments on every Pydantic field bound
+
+---
+
+## Architecture Constraints
+- **Physics layer** (`physics/`): pure functions only, no Dash/UI imports
+- **Orchestrator layer** (`orchestrator/`): drives solve_ivp, never touches Plotly
+- **UI layer** (`ui/`): Dash callbacks only, always calls orchestrator — never physics directly
+- PWR and MSR share `physics/shared/kinetics.py` — never duplicate kinetics math
+- All simulation state in `dcc.Store` — never use global Python variables
+
+---
+
+## ODE Solver Config (fixed — do not change without instruction)
+```python
+solve_ivp(fun, t_span, y0, method='Radau', rtol=1e-6, atol=1e-9, dense_output=True)
+```
+
+---
+
+## Testing
+- Write tests alongside implementation, not after
+- Physics functions get unit tests against hand-calculated values
+- Always run `pytest` before suggesting a commit
+- Target: >80% coverage on all `physics/` modules
+
+---
+
+## Dash Patterns
+- `dcc.Store` for shared state between callbacks
+- `dcc.Interval` for real-time simulation updates  
+- Never call physics engines directly inside callbacks — route through `orchestrator/sim_runner.py`
+- Use `plotly.graph_objects` (not `plotly.express`) for all figures
+
+---
+
+## Do Not Suggest
+- `pip install` (use `poetry add`)
+- Global variables for simulation state
+- Calling physics functions from Dash callbacks directly
+- Implementing anything in the explicit out-of-scope list (spatial flux, burnup, PID, Monte Carlo, accident progression, DNB, salt chemistry)
+- Changing ODE solver or tolerances
+- Hardcoding Keepin parameters or Bosch-Hale coefficients outside `data/` modules
+
+
+8. Milestone & Iterative Development Plan
+Pre-Phase: Environment Setup
+Duration: Week 1 Deliverables:
+•	Poetry environment configured with all dependencies installed and locked
+•	GitHub repository initialized with branch protection and README
+•	ARCHITECTURE.md created in repository root covering layer separation, engine boundaries, shared kinetics core design decision, and 0DE state vectors. Updated at the end of each phase.
+•	Dash boilerplate application running locally with placeholder reactor selector
+•	IAEA delayed neutron database downloaded and parsed into project data directory
+•	Keepin 6-group parameters loaded and unit-tested
+•	Bosch-Hale D-He3 coefficients implemented and verified against published ⟨σv⟩ tables
+•	Pydantic base schemas defined for all three reactor parameter sets
+•	Render or Railway deployment pipeline connected to GitHub — deploy the boilerplate immediately so deployment is never a last-minute problem
+Success Criteria: poetry run pytest passes on data loading tests. Dash app accessible at public URL showing placeholder UI.
+ 
+Phase 1: PWR Twin
+Duration: Weeks 2–5 This phase builds the platform, not just the PWR. Every architectural decision made here persists through Phases 2 and 3.
+Week 2 — Kinetics Engine:
+•	Implement 6-group point kinetics ODE system
+•	Implement Xe-135/I-135 kinetics ODE system
+•	Implement Doppler and moderator feedback calculators
+•	Implement boron worth calculator
+•	Implement reactivity balance summation
+•	Unit test all components individually
+•	Integration test: steady-state stability
+Week 3 — Thermal Hydraulics + Full PWR System:
+•	Implement lumped fuel and coolant temperature ODEs
+•	Couple thermal-hydraulic module to kinetics engine via feedback loop
+•	Implement full 11-state PWR ODE system
+•	Apply Numba JIT to hot loops
+•	Benchmark performance against NFR-02 target
+•	Validate Doppler self-regulation and xenon equilibrium
+Week 4 — PWR UI:
+•	Build PWR control panel (Dash + DBC): rod, boron, flow rate, temperature inputs
+•	Build real-time Plotly time-series plots: power, temperatures, reactivity breakdown, Xe/I concentrations
+•	Implement accelerated time mode (time multiplier slider)
+•	Implement plain-language event log
+•	Implement HDF5 save/load for simulation states
+Week 5 — PWR Scenarios + Validation:
+•	Implement scenario mode with predefined PWR scenarios: rod ejection, boron dilution, xenon peak post-shutdown, load following
+•	Complete physics validation checklist (Section 9.3)
+•	Polish UI, fix performance issues
+•	Deploy Phase 1 to production URL
+•	Write Phase 1 retrospective: what architectural decisions need to change before Phase 2
+Phase 1 Success Criteria: PWR twin accessible at public URL. All physics validation benchmarks passed. Xenon peak transient demonstrable. Rod ejection scenario shows Doppler self-regulation.
+ 
+Phase 2: Helion FRC Twin
+Duration: Weeks 6–9 This phase validates platform modularity. Helion's physics is fundamentally different — if the platform architecture accommodates it cleanly, Phase 3 is low risk.
+Week 6 — Helion Physics Engine:
+•	Implement plasma energy balance ODE
+•	Implement Bosch-Hale reactivity lookup (already unit-tested from pre-phase)
+•	Implement adiabatic compression heating calculator
+•	Implement Bremsstrahlung radiation loss
+•	Implement empirical confinement time scaling with documented uncertainty range
+•	Unit and integration tests
+Week 7 — Helion Scenarios + Parameter Sweep:
+•	Implement pulse simulation (microsecond timescale, no time acceleration needed)
+•	Implement 2D ignition boundary sweep across compression ratio × plasma density
+•	Implement Q factor calculation
+•	Validate energy conservation and temperature scaling
+Week 8 — Helion UI:
+•	Build Helion control panel: compression ratio, plasma density, temperature, pulse duration inputs
+•	Build time-series plots: temperature, fusion power, loss channels
+•	Build ignition boundary heatmap (most visually striking output in the platform)
+•	Integrate into unified reactor selector with PWR
+Week 9 — Integration + Polish:
+•	End-to-end testing of PWR + Helion together in unified dashboard
+•	Performance validation on deployed instance
+•	Deploy Phase 2 to production
+Phase 2 Success Criteria: Helion twin accessible at same public URL as PWR. Ignition boundary heatmap renders correctly showing Q > 1 region. Platform selector switches cleanly between PWR and Helion without state contamination.
+ 
+Phase 3: MSR Twin
+Duration: Weeks 10–12 This phase demonstrates the shared kinetics infrastructure was worth building correctly. MSR reuses the PWR kinetics core with drift modifications.
+Week 10 — MSR Physics Engine:
+•	Subclass/extend shared kinetics core with precursor drift terms
+•	Implement precursor return delay with exponential decay
+•	Implement β_eff,flow calculation
+•	Implement unified salt thermal-hydraulic module
+•	Implement temperature feedback (single salt coefficient)
+•	Unit test drift modification against zero-flow equality with PWR results
+Week 11 — MSR Scenarios + UI:
+•	Implement MSR scenarios: pump trip, load following, comparison of β_eff,flow at different salt velocities
+•	Build MSR control panel and plots
+•	Integrate into unified dashboard
+Week 12 — Final Integration + Portfolio Polish:
+•	Three-reactor platform fully integrated and deployed
+•	Complete physics validation for MSR (Section 9.3)
+•	Full regression test suite passing across all three reactors
+•	README written for GitHub: project purpose, physics summary, live demo link, tech stack
+•	Engineering spec document finalized and linked from README
+•	Final performance audit on deployed instance
+Phase 3 Success Criteria: All three reactor twins accessible from unified dashboard at public URL. MSR β_eff,flow demonstrably decreases with salt velocity. Shared kinetics consistency test passes. Full physics validation checklist complete across all three reactors.
